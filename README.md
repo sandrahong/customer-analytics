@@ -20,7 +20,7 @@ To measure the effectiveness of the ads, a control group can be created and show
     + Until further analysis on the group with over 200 impressions, it's best to stop advertising to this group because it's ineffective and the group does not respond well to the ads.  
 
 
-# [Project 2: Scoring Exercise](https://sandrahong.github.io/customer-analytics/Scoring-Exercise.html)
+# [Project 2: Lead Scoring Exercise](https://sandrahong.github.io/customer-analytics/Scoring-Exercise.html)
 ## Overview
 Lead scoring is a strategy that marketing and sales teams use to identify which prospects are most valuable to a company in their current sales funnel. In this example project, I leverage a logit model to score leads to help identify prospects who are more likely to convert. 
 
