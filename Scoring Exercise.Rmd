@@ -1,0 +1,193 @@
+---
+title: "Lead Scoring Exercise"
+date: "11/20/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+Lead scoring is a strategy that marketing and sales teams use to identify which prospects are most valuable to a company in their current sales funnel. In this exercise, I leverage a logit model to score leads to help identify prospects who are more likely to convert. 
+
+For each prospect, I calculate a score, the predicted response probability, predicted lift, and compare with the actual response to evaluate the accuracy of my model. Through this model, I improve average profit per name from -2 dollars to 0.26 dollars, and total profit per name from -600 dollars to 78 dollars.
+
+
+```{r results="hide"}
+
+# Clear All Variables & Clear Screen
+rm(list=ls())
+cat("\014")
+
+# Read in the Data
+data.training = read.csv("~/Desktop/MSBA/Customer_Analytics/Ex4_scoring/Data_Estimation_R.csv")
+data.testing = read.csv("~/Desktop/MSBA/Customer_Analytics/Ex4_scoring/Data_Holdout_R.csv")
+
+# Explore the data
+str(data.training)
+summary(data.training)
+
+```
+## Analysis
+* **Logit Model**: Prediction of y (i.e., the decision to join the club) as a function of the available scoring variables x (gender and all hl…) using a Logit model. 
+
+```{r}
+# Binary Logit Model  
+glm.model <- glm(y ~ hl1 + hl2 + hl3 +  hl5 + hl6 + gender , family=binomial(link='logit'), data=data.training)
+
+# Display Results
+summary(glm.model)
+
+```
+* **Calculating predicted response rate and lift**: Using the logit model, I scored all individuals in the Testing sample. I calculated for all prospects in the Testing sample, the (a)	Predicted Response Rate, and (b)	Lift. The results below show the calculations for the first 10 Names. 
+
+```{r results="hide"}
+
+# Predicting Buy/No Buy for the 300 TESTING IDs based on the Model Estimates
+(prediction.testing <- data.frame(ID = data.testing$id, 
+                                  BinaryLogitProbability = predict(glm.model, data.testing, type = c("response")),
+                                  BinaryLogitPredict     = round(predict(glm.model, data.testing, type = c("response")), digits = 0)))
+
+sum(prediction.testing["BinaryLogitPredict"]) 
+
+sum(prediction.testing["BinaryLogitProbability"])
+
+# Added Lift to the Forecast. Lift is simply the predicted response rate divided by the average response rate of the Training sample
+prediction.testing$lift = prediction.testing$BinaryLogitProbability/mean(data.training$y)
+
+```
+
+```{r results }
+head(prediction.testing, 10)
+```
+
+* **Confusion Matrix**: The confusion matrix is the cross-tab of predicted response against actual response. Using the matrix, I evaluated the performance of the classification model on a set of test data for which the true values are known. The accuracy of the model is 65.7%.
+```{r}
+library(gmodels)
+CrossTable(data.testing$y, prediction.testing$BinaryLogitPredict,prop.r=TRUE, prop.c=FALSE, prop.t=FALSE,
+           prop.chisq=FALSE, dnn = c("Real Response", "Predicted Response"))
+
+```
+* **Response Probability Chart**: Because there is a cost to sending out invitation, I'd like to target prospects that have higher likelihoods of responding. To do so, I sorted the probability responses from best to worst 
+and created a Response Probability Chart. 
+
+```{r results="hide"}
+
+prediction.testing.ResponseSort <- prediction.testing[order(-prediction.testing$BinaryLogitProbability),]
+prediction.testing.ResponseSort
+# Plot of Marginal Response Rate vs. Number of Prospects Targeted
+
+plot(prediction.testing.ResponseSort$BinaryLogitProbability, main="Marginal Response Rate",
+   xlab="#Prospects", ylab="Response Rate")
+
+```
+
+
+
+## Results
+
+1) **Cut off response rate**: Given that the average CLV is 30 dollars and the solicitation cost is $12, I can use the Marginal Cost Rule to determine who the CD club should send invitations to. The cutoff response rate is 0.4 because the solicitation cost of 12 dollars divided by the average CLV of 30 dollars is 0.4. Looking at the holdout list in decreasing order of lift, the company should send out to the 1st to the 116th highest prospect because that 116th highest prospect has a binary logit probability of 0.4008 and those after that have a marginal response probability < 0.4. 
+
+```{r}
+#Marginal Cost Rule to determine cut off response rate
+cut_off <- 12/30
+table(prediction.testing$BinaryLogitProbability > 0.4) 
+
+```
+
+2) **Expected Responses**: Given that the CD club has only 40 items of the collector’s edition of “Pink Floyd’s The Wall”, I can use the Limited Supply Rule to determine which prospects (and how many) on the Testing list should the CD club send an invitation to. I compute the Cumulative Sum (aka running sum) for the Predicted Response Rates in decreasing order. The plot shows the Number of Positive Responses vs. Number of Prospects Targeted. The firm should mail to the 1st to the 64th highest prospects because at the 64th highest prospect, the cumulative sum of the predicted response rate is 39.977 and at the 65th highest prospect, the cumulative sum is 40.007. 
+
+
+```{r}
+# Expected Responses
+CumulativeSum = cumsum(prediction.testing.ResponseSort$BinaryLogitProbability)
+plot(CumulativeSum, main="Expected Sales From Targeting",
+   xlab="#Prospects", ylab="Sales")
+```
+
+
+```{r}
+full_data<-cbind(prediction.testing.ResponseSort ,CumulativeSum)
+table(full_data$CumulativeSum < 40) 
+
+```
+
+3) **Comparison of Actual to Predicted Response Rates**: To evaluate my predictions, I compare the Actual Response Rates to the Predicted Response Rates for the prospects in the Testing Sample. The plot below shows the two rates superimposed. 
+
+The differences between the Actual Response Rates and the Predicted Response Rates for the prospects in the Testing Sample is that the Predicted Response Rates is underpredicted for approximately the highest 250th prospects. The Predicted Response Rates is then overpredicted after the highest 250th prospects. This means that if the CD club has only 40 items of the collector’s edition of “Pink Floyd’s The Wall”, the company should send fewer invitations out based on the Limited Supply Rule.
+
+```{r }
+library(ggplot2)
+actual.testing <- data.testing[c("id","y")] 
+actual.testing$predictedresponse <- prediction.testing$BinaryLogitProbability
+actual.testing.ResponseSort <- actual.testing[order(-actual.testing$predictedresponse),]
+full_data$CumulativeSum.actual = cumsum(actual.testing.ResponseSort$y)
+full_data$row_num <- seq.int(nrow(full_data))
+p1 <- ggplot( full_data, aes(x = row_num, y = CumulativeSum)) + geom_point(color="blue", size=0.003)
+p1 <- p1 + geom_point(aes(x = row_num,y = CumulativeSum.actual), color="red", size=0.003) +  ggtitle("Expected Sales from Targeting compared to Actual")  + labs(x = "# of Prospects", y = "Sales")
+p1
+```
+
+4) **Profit Impact**: The average and total profit per name with scoring is better. Through this model, I improve average profit per name from -2 dollars to 0.26 dollars, and total profit per name from -600 dollars to 78 dollars.
+
+```{r}
+nhh  = dim(prediction.testing)[1]
+targetall.profit = setNames(data.frame(matrix(ncol = 1, nrow = nhh)), c("Profit"))
+# Loop over all HH (in our case 300) and calculate the profit based on the model's predicted probabilities
+for (i in 1:nhh) {
+  
+  # Check whether the consumer did buy
+    if (data.testing$y[i]> 0) 
+      {
+        targetall.profit[i,1] = 18
+      } 
+    else 
+      {
+      targetall.profit[i,1] = -12
+      }
+}
+# Average Profit per name WITHOUT Scoring
+mean(targetall.profit[,1])
+# Total Profit per name WITHOUT Scoring
+sum(targetall.profit[,1])
+
+# 2 Profit using the scoring model
+# Create a Dataframe for save the results in (300 HH and one profit each)
+prediction.profit = setNames(data.frame(matrix(ncol = 1, nrow = nhh)), c("Profit"))
+# Loop over all HH (in our case 300) and caculate the profit based on the model's predicted probabilities
+for (i in 1:nhh) {
+  # Check for predicted purchase probability > 0.4 
+    if (prediction.testing$BinaryLogitProbability[i]> 0.4) 
+      {
+      # We target these consumers. Now check whether they would have bought!
+      if(data.testing$y[i]>0) 
+        {
+        prediction.profit[i,1] = 18
+        } 
+      else 
+        {
+        prediction.profit[i,1] = -12
+        }
+      }
+    else 
+      {
+      prediction.profit[i,1] = 0
+      }
+}
+# Average Profit per name with Scoring
+mean(prediction.profit[,1])
+# Total Profit per name with Scoring
+sum(prediction.profit[,1])
+```
+
+
+
+
+
+
+
+
+
