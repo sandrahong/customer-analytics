@@ -1,0 +1,238 @@
+---
+title: "Measuring the Effect of Online Advertising"
+date: "03/12/2022"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Overview
+
+The primary objective of the campaign is to target half a million online consumers with ads for a company's new product. The campaign must result in positive ROI to justify spend of advertising dollars.
+
+**Experimental Design**: To measure the effectiveness of the ads, a control group can be created and shown a public service announcement (PSA) instead of the ad, in the exact same size and position on the page. By randomly selecting which user is in the control group and which users are exposed to the real ad, the extent to which the advertising makes a difference can be measured.
+
+**Results**:
+
+* **Effectivness of ad campaign**: Based on the experiment and analysis, ad campaign has a positive effect on conversion rate. The ROI is 37.73%.    
+
+* **Validity of experiment results**: The control and treatment groups is not statistically different - they have similar amount on average impressions per person. There was an opportunity cost to running the experiment, but now with the statistically significant results, they can move forward with the ad.
+
+* **Other insights**: 
+    + Advertising on Tuesday is more effective than other days.   
+    + Customers are more responsive to the ads during 5-6 pm, 2 pm, and 8 pm-1 am. To maximize effectiveness, distribute more of marketing budget on those times of the day.  
+    + Until further analysis on the group with over 200 impressions, it's best to stop advertising to this group because it's ineffective and the group does not respond well to the ads.  
+
+
+
+
+### Load data
+
+Load csv file
+
+```{r}
+data = read.csv("~/Desktop/MSBA/Digital_Marketing/Assignment-2/rocketfuel.csv")
+#Data type conversions
+
+data$mode_impr_day = as.factor(data$mode_impr_day)
+data$mode_impr_hour = as.factor(data$mode_impr_hour)
+```
+
+### Exploratory Analysis
+```{r}
+table(data$test)
+print(sprintf("Users in control group = %f", unname(table(data$test)[1])))
+print(sprintf("Users in test group = %f", unname(table(data$test)[2])))
+
+library(dplyr)
+
+conversion <-
+data %>%
+  group_by(test) %>%
+  summarise(
+    Conversion_Rate = mean(converted)
+  )
+conversion[1,2]
+
+print(sprintf("Conversion rate in control group = %f", unname(conversion[1,2])))
+print(sprintf("Conversion rate in test group = %f", unname(conversion[2,2])))
+```
+* **Conversion rate**: The numbers of users in test and control groups are 564,577 users and 23,524 users, respectively. The conversion rate of each group, defined as percentage of unique users who made a purchase, is 0.0255 for test group and 0.01785 for control group.
+
+### Randomization Checks
+
+```{r}
+library(dplyr)
+
+tot_imp_group = data %>%
+  group_by(test) %>%
+  summarise(
+    Total_Impressions = mean(tot_impr)
+  )
+
+tot_imp_group
+
+#t-test
+control = data[data$test == 0,]
+treatment = data[data$test == 1,]
+t.test(control$tot_impr, treatment$tot_impr)
+```
+To check for randomization, I evaluate whether the test and control groups are statistically different. The total number of impressions for an average user in the test and control group is 24.82 and 24.76, respectively. The p-value is 0.827, indicating that the test and control groups are not statistically different in the total number of impressions for an average user. Hence, the test and control groups are well randomized.
+
+### Treatment Effect
+```{r}
+#Part a
+t_test_conv = t.test(control$converted, treatment$converted)
+t_test_conv
+
+# Conversion rate of treatment minus conversion rate of control
+lift = unname(t_test_conv$estimate[2]) - unname(t_test_conv$estimate[1]) 
+#lift
+print(sprintf("Lift is = %f", lift))
+
+#Part b
+model = glm(converted ~ test, data = data, family = "binomial")
+
+control_prob = predict(model, newdata = data.frame(test=c(0)), type = 'response')
+treatment_prob = predict(model, newdata = data.frame(test=c(1)), type = 'response')
+# lift using logistic regression
+print(sprintf("Lift using logistic is = %f", (treatment_prob - control_prob)))
+
+```
+Using a t-test, I evaluate that the conversion rate in the test group is higher than the conversion rate in the control group by 0.00769. Moreover, when I use a logistic regression to calculate the lift, it's the same difference. 
+
+### Costs and ROI
+```{r}
+print.money <- function(x) {
+  paste0("$", formatC(as.numeric(x), format="f", digits=2, big.mark=","))
+}
+
+percent <- function(x, digits = 2, format = "f") {
+  paste0(formatC(100 * x, format = format, digits = digits), "%")
+}
+
+campaign_cost = (sum(treatment$tot_impr) / 1000) * 9
+sprintf("Campaign cost is = %s", print.money(campaign_cost))
+
+# Number of customers who made a purchase * 40 minus campaign cost
+money_made = (nrow(treatment) * lift * 40)
+sprintf("Money made via campaign is = %s", print.money(money_made))
+
+# ROI = (Revenue - cost) / cost
+roi = (money_made-campaign_cost) / campaign_cost
+sprintf("ROI is = %s", percent(roi))
+
+# Opportunity cost with no control group
+opp_cost = length(control$user_id) * lift * 40 - (sum(control$tot_impr) / 1000) * 9
+sprintf("Opportunity cost is = %s", print.money(opp_cost))
+```
+* The company made 173,719.29 dollars more by running the ad campaign, excluding advertising costs. The cost of the ad campaign is $126,132.31, so the ROI for this campaign is 37.73%
+* **Opportunity cost**: The opportunity cost of including a control group (i.e., how much more could the company have made with a smaller control group or not having a control group at all) is $1,995.96 more after deducting the ad displaying cost.
+
+### Effectiveness in different days
+Using a t-test, I can measure the effectiveness of the advertising campaign for different days of the week.
+```{r}
+for(i in 1:7) {
+  #split data by week day
+  control_day = filter(control, control$mode_impr_day == i)
+  treatment_day = filter(treatment, treatment$mode_impr_day == i)
+  
+  #t-test
+  t_test_day = t.test(control_day$converted, treatment_day$converted)
+  lift_day = unname(t_test_day$estimate[2]) - unname(t_test_day$estimate[1]) #  conversion rate of treatment minus conversion rate of control
+  print(paste0("Lift for day '",i,"' is = ",lift_day," and p-value is = ",t_test_day$p.value))
+}
+```
+Using a logistic regression, I can also measure the effectiveness of the advertising campaign for different days of the week.
+```{r}
+for(i in 1:7) {
+  #-----------logistic-----------
+  #split data by week day
+  control_day = filter(control, control$mode_impr_day == i)
+  treatment_day = filter(treatment, treatment$mode_impr_day == i)
+  
+  #filter data by day of the week
+  data_day = filter(data, data$mode_impr_day == i)
+  
+  #run logit on filtered data set
+  model_day = glm(converted ~ test + mode_impr_hour, data = data_day, family = "binomial")
+
+  #predict on control group
+  control_prob = predict(model_day, newdata = control_day, type = 'response')
+  
+  #predict on treatment group
+  treatment_prob = predict(model_day, newdata = treatment_day, type = 'response')
+  
+  #calculate and print lift
+  
+  print(paste0("Lift for day '",i,"' using logistic is = ",(mean(treatment_prob) - mean(control_prob))))
+}
+```
+
+The campaign is most effective on Tuesday with lift of ~1.6%, and least effective on Thursday with lift of ~0.14%, followed by Sunday with lift of ~0.4%. The recommendation would be to reduce the ad spending on these two days.
+
+### Effectiveness at different hours
+Next, I measure the effectiveness of the advertising campaign at different hours of a day.
+```{r}
+for(i in 0:23) {
+  #split data by hour of the day
+  control_hour = filter(control, control$mode_impr_hour == i)
+  treatment_hour = filter(treatment, treatment$mode_impr_hour == i)
+  
+  #t-test
+  t_test_hour = t.test(control_hour$converted, treatment_hour$converted)
+  lift_hour = unname(t_test_hour$estimate[2]) - unname(t_test_hour$estimate[1]) #  conversion rate of treatment minus conversion rate of control
+  print(paste0("Lift for hour '",i,"' is = ",lift_hour," and p-value is = ",t_test_hour$p.value))
+}
+
+```
+
+The campaign is most effective around 6am with lift of ~ 2.32%, and has a negative effect around 3am with lift of ~ -0.08%. Hence, spend less around 3am to avoid negative effects.
+
+### The Effect of Ad Frequency
+To test the effect of ad frequency, customers are broken  into  6  groups  based  on  the  number  of  impressions  they  received: [0,40], [41, 80], [81, 120], [121, 160], [161, 200] and 200+. For example, customers in the first group received 0-40 impressions, and customers in the last group received more than 200  impressions. Then, the effectiveness of the campaign for each group is calculated. 
+```{r}
+control$tot_impr_bucket <- cut(control$tot_impr, 
+                  breaks=c(0,40,80,120,160,200,nrow(data)), 
+                  include.lowest=FALSE, 
+                  include.highest=TRUE,
+                  label=c("[0-40]","[41-80]", "[81-120]", "[121-160]", "[161-200]", "[200-]")
+                  )
+treatment$tot_impr_bucket <- cut(treatment$tot_impr, 
+                  breaks=c(0,40,80,120,160,200,nrow(data)), 
+                  include.lowest=FALSE, 
+                  include.highest=TRUE,
+                  label=c("[0-40]","[41-80]", "[81-120]", "[121-160]", "[161-200]", "[200-]")
+                  )
+
+
+for(i in c("[0-40]","[41-80]", "[81-120]", "[121-160]", "[161-200]", "[200-]")) {
+   #split data by week day
+    control_day = filter(control, control$tot_impr_bucket == i)
+    treatment_day = filter(treatment, treatment$tot_impr_bucket == i)
+    
+    #t-test
+    t_test_day = t.test(control_day$converted, treatment_day$converted)
+    lift_day = unname(t_test_day$estimate[2]) - unname(t_test_day$estimate[1]) #  conversion rate of treatment minus conversion rate of control
+    print(paste0("Lift for group '",i,"' is = ",lift_day," and p-value is = ",t_test_day$p.value))
+}
+```
+
+There are varying effectiveness for each group. For example, the campaign is most effective in [81-120] group lift of ~ 9.26%. Additionally, when comparing different groups, advertising is less effective for customers who saw 200+ ads compared to those who saw [41-80] ads. This may be because the previous group may have higher number of impressions because they are heavy internet users who neglect the ads or web crawlers, rather than having strong intentions to buy like the latter group.
+
+It cannot conclude  the  causal  relationship  that  “showing more  than  200  ads  to  a  consumer lowers the customer’s probability of purchase." It can only conclude that the higher numbers of impressions have less or no effect on increasing conversion rate. Customers with 200+ impressions could be seen as an extreme sample group that require more analysis to identify its causal relationship with customers' purchase behaviors. 
+
+### Summary and Conclusion
+* **Effectivness of ad campaign**: Based on the experiment and analysis, ad campaign has a positive effect on conversion rate. The ROI is 37.73%.    
+
+* **Validity of experiment results**: The control and treatment groups is not statistically different - they have similar amount on average impressions per person. There was an opportunity cost to running the experiment, but now with the statistically significant results, they can move forward with the ad.
+
+* **Other insights**: 
+    + Advertising on Tuesday is more effective than other days.   
+    + Customers are more responsive to the ads during 5-6 pm, 2 pm, and 8 pm-1 am. To maximize effectiveness, distribute more of marketing budget on those times of the day.  
+    + Until further analysis on the group with over 200 impressions, it's best to stop advertising to this group because it's ineffective and the group does not respond well to the ads.  
+
