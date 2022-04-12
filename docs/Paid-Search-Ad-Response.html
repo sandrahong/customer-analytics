@@ -172,11 +172,14 @@ pre code {
 </div>
 
 
-<div id="short-run-and-long-run-paid-search-advertising-response" class="section level2">
-<h2>Short-run and Long-run Paid Search Advertising Response</h2>
+<div id="overview" class="section level2">
+<h2>Overview</h2>
+<p>For this example project, I investigated short-run and long-run response of clicks (i.e., visitors) to paid search advertising.</p>
+<p>To get the results, I generated <strong>linear, concave logarithmic,</strong> and <strong>concave quadratic regression models</strong> and tested the significance of each model. Drawing on the fitted models, I computed the <strong>advertising elasticity</strong> implied by each model using July’s monthly clicks and the <strong>saturation level</strong> for advertising spending. Results are reported in terms of daily advertising spending.</p>
 </div>
-<div id="loading-data" class="section level1">
-<h1>Loading Data</h1>
+<div id="data" class="section level2">
+<h2>Data</h2>
+<p>Dataset from Google Adwords that includes total daily visitors to the shop and daily spend ($) on paid search. The dataset spans 66 days from May 1st, 2019.</p>
 <div style="page-break-after: always;"></div>
 <pre><code>## &#39;data.frame&#39;:    66 obs. of  3 variables:
 ##  $ Day        : chr  &quot;5/1/2019&quot; &quot;5/2/2019&quot; &quot;5/3/2019&quot; &quot;5/4/2019&quot; ...
@@ -190,9 +193,10 @@ pre code {
 ##                     3rd Qu.:1044.0   3rd Qu.: 884.0  
 ##                     Max.   :1197.0   Max.   :1400.0</code></pre>
 </div>
-<div id="prepare-data" class="section level1">
-<h1>Prepare Data</h1>
-<p>In our case, we create new variables: log(Advertising), Advertising^2, and Lag(Sales)</p>
+<div id="short-run-response" class="section level2">
+<h2>Short-run Response</h2>
+<p>To analyze the short-run response of clicks (i.e., visitors) to advertising (i.e., paid search spending), we fit the following three models of advertising-click response. At this stage we will not add other information to the model; keep things simple and stick to advertising.</p>
+<p>We created new variables for the Log Total Spent and (Total Spent)^2 to generate the linear, concave logarithmic and concave quadratic regression models. Based on the results, we found that all variables in all the models were &lt; 0.05 and hence, considered significant along with the overall P-values of all models. The R squared value was found to be highest for the concave quadratic model.</p>
 <pre class="r"><code># Create log Advertising
 data.adv$logTotal.Spent &lt;- log(data.adv$Total.Spent)
 
@@ -224,10 +228,6 @@ summary(data.adv)</code></pre>
 ##  3rd Qu.: 781456   3rd Qu.:1044.0   3rd Qu.:2019-06-18   3rd Qu.:6.000  
 ##  Max.   :1960000   Max.   :1197.0   Max.   :2019-07-05   Max.   :7.000  
 ##                    NA&#39;s   :1</code></pre>
-<div id="short-run-response." class="section level2">
-<h2>Short-run Response.</h2>
-<p>To analyze the short-run response of clicks (i.e., visitors) to advertising (i.e., paid search spending), we fit the following three models of advertising-click response. At this stage we will not add other information to the model; keep things simple and stick to advertising.</p>
-<p>We created new variables for the Log Total Spent and (Total Spent)^2 to generate the linear, concave logarithmic and concave quadratic regression models. Based on the results, we found that all variables in all the models were &lt; 0.05 and hence, considered significant along with the overall P-values of all models. The R squared value was found to be highest for the concave quadratic model.</p>
 <pre class="r"><code>#i. Simple linear 
 lm.model1 &lt;- lm(Visitors ~ Total.Spent, data = data.adv)
 #ii. Concave logarithmic
@@ -294,6 +294,8 @@ summary(lm.model1)</code></pre>
 ## Residual standard error: 162.4 on 63 degrees of freedom
 ## Multiple R-squared:  0.4975, Adjusted R-squared:  0.4815 
 ## F-statistic: 31.18 on 2 and 63 DF,  p-value: 3.857e-10</code></pre>
+<div id="short-run-elasticities" class="section level3">
+<h3>Short-run Elasticities</h3>
 <p>We then computed the advertising elasticity implied by each model using July’s monthly clicks and advertising spent to scale the elasticities. The elasticities for linear, logarithmic, and quadratic models are 0.2641779, 0.3013407, and 0.3731448, respectively.</p>
 <pre class="r"><code>july_calc &lt;- data.adv %&gt;% filter(data.adv$dates_month == 7) %&gt;% summarise(mean_spent=mean(Total.Spent), mean_visitors = mean(Visitors), quotient=mean(Total.Spent) / mean(Visitors))
 
@@ -319,10 +321,10 @@ elasticity_1</code></pre>
 ## 1 0.3731448</code></pre>
 <p>All our R-squared values were within .08 of each other. All our models also had statistical significance for all coefficients. We are confident that all our models are quite strong and could be used in the short term to project advertising returns. Out of all our models, the concave quadratic model had the highest R squared, so if we were to pick the best model solely based on the highest R square value, that would be the best one. However, a quadratic model is not very realistic in terms of projecting the future, as quadratic models imply future returns that should not be expected in advertising, due to its exponential growth. We believe that the best model is logarithmic, as that has an anti-saturation mechanic built in. Linear is also a fair model, but we believe that the logarithmic model represents the market best.</p>
 </div>
-<div id="long-run-response." class="section level2">
-<h2>Long-run Response.</h2>
-<p>To analyze the long-run response of clicks to advertising using the same data, we it the same three models of advertising response but incorporate an exponentially decaying lag effect for advertising.</p>
-<p>All three models have high adjusted R-square (0.9609, 0.9696 and 0.9603).</p>
+</div>
+<div id="long-run-response" class="section level2">
+<h2>Long-run Response</h2>
+<p>To analyze the long-run response of clicks to advertising using the same data, we created the same three models of advertising response but incorporate an exponentially decaying lag effect for advertising. All three models have high adjusted R-square (0.9609, 0.9696 and 0.9603).</p>
 <pre class="r"><code>#i. Simple linear with carryover
 lm.model4 &lt;- lm(Visitors ~ Total.Spent + lagSales, data = data.adv)
 #ii. Concave logarithmic with carryover
@@ -396,6 +398,8 @@ summary(lm.model4)</code></pre>
 ##   (1 observation deleted due to missingness)
 ## Multiple R-squared:  0.9622, Adjusted R-squared:  0.9603 
 ## F-statistic: 517.4 on 3 and 61 DF,  p-value: &lt; 2.2e-16</code></pre>
+<div id="long-run-elasticities" class="section level3">
+<h3>Long-run Elasticities</h3>
 <p>We then computed the long-run advertising elasticity implied by each model, again using July’s monthly figures for scaling. Elasticities for linear, logarithmic, and quadratic models are 0.3636333, 0.3761668, and 0.383433, respectively.</p>
 <pre class="r"><code># coefficients from models
 beta_4 = lm.model4$coefficients
@@ -418,13 +422,12 @@ elasticity_4 </code></pre>
 <pre class="r"><code>elasticity_6</code></pre>
 <pre><code>##           
 ## 1 0.383433</code></pre>
-<p>All of our long run models had high and very similar R squared and should be considered acceptable. The goal of the exercise is to find a long-run model with a high correlation of total sales to total advertising spend. Given model 4 has the highest R squared and the lowest elasticity, we would recommend this model be used for future forecasts.</p>
+<p>All of our long run models had high and very similar R squared and should be considered acceptable. Given the logarithmic model has anti-saturation mechanic built in, we would recommend this model be used for future forecasts.</p>
 </div>
 </div>
-<div id="saturation" class="section level1">
-<h1>Saturation</h1>
-<p>Drawing on the models fitted above, we computed the saturation level for advertising spending. Results are reported in terms of daily advertising spending.</p>
-<p>The saturation level for daily advertising spending in the concave quadratic model without advertising carryover is 1150.32 dollars per day, and the saturation level in the concave quadratic model with advertising carryover is 3447.06 dollars per day.</p>
+<div id="saturation" class="section level2">
+<h2>Saturation</h2>
+<p>Drawing on the models fitted above, we computed the saturation level for advertising spending. Results are reported in terms of daily advertising spending. The saturation level for daily advertising spending in the concave quadratic model without advertising carryover is 1150.32 dollars per day, and the saturation level in the concave quadratic model with advertising carryover is 3447.06 dollars per day.</p>
 <pre class="r"><code>beta = lm.model3$coefficients
 sat_lm.model3 = - beta[2] / (2*beta[3])
 
